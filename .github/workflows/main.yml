@@ -1,32 +1,8 @@
-name: Auto Update Subscription
-
-on:
-  schedule:
-    - cron: '0 */6 * * *' # Запуск каждые 6 часов
-  workflow_dispatch: # Позволяет запускать вручную кнопкой
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
-
-      - name: Install dependencies
-        run: pip install requests
-
-      - name: Run scraper
-        run: python main.py
-
-      - name: Commit and push changes
+- name: Commit and push changes
         run: |
           git config --global user.name "AutoBot"
           git config --global user.email "bot@github.com"
           git add sub_auto.txt
+          git pull --rebase origin main
           git commit -m "Auto-update configs" || exit 0
           git push
