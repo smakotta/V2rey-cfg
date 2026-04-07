@@ -3,41 +3,50 @@ import base64
 import re
 import json
 
-# 1. Огромный список источников (ты можешь добавлять свои ссылки сюда)
+# 1. Список источников (ЗАПЯТЫЕ В КОНЦЕ СТРОК ОБЯЗАТЕЛЬНЫ)
 sources = [
     "https://raw.githubusercontent.com/w1770946466/Auto_Proxy/main/Long_term_subscription_num",
     "https://raw.githubusercontent.com/stayallive/v2ray-proxy-group/main/v2ray-proxy-group.txt",
     "https://raw.githubusercontent.com/soroushmirzaei/telegram-proxies-collector/main/proxies",
     "https://raw.githubusercontent.com/Epodonios/v2ray-configs/main/All_Configs_Sub.txt",
-    "https://raw.githubusercontent.com/tbbatbb/Proxy/master/dist/v2ray.txt"
-    "https://raw.githubusercontent.com/kort0881/vpn-checker-backend/main/checked/RU_Best/ru_white_all_part2.txt"
-    "https://raw.githubusercontent.com/zieng2/wl/main/vless_universal.txt"
+    "https://raw.githubusercontent.com/tbbatbb/Proxy/master/dist/v2ray.txt",
+    "https://raw.githubusercontent.com/kort0881/vpn-checker-backend/main/checked/RU_Best/ru_white_all_part2.txt",
+    "https://raw.githubusercontent.com/zieng2/wl/main/vless_universal.txt",
     "https://raw.githubusercontent.com/AvenCores/goida-vpn-configs/refs/heads/main/githubmirror/26.txt"
 ]
 
-# Словарь флагов для красоты
+# Словарь флагов
 FLAGS = {
     'US': '🇺🇸', 'DE': '🇩🇪', 'RU': '🇷🇺', 'TR': '🇹🇷', 'NL': '🇳🇱', 
-    'SG': '🇸🇬', 'FR': '🇫🇷', 'GB': '🇬🇧', 'JP': '🇯🇵', 'HK': '🇭🇰'
+    'SG': '🇸🇬', 'FR': '🇫🇷', 'GB': '🇬🇧', 'JP': '🇯🇵', 'HK': '🇭🇰',
+    'FI': '🇫🇮', 'PL': '🇵🇱', 'KZ': '🇰🇿', 'UA': '🇺🇦', 'CA': '🇨🇦'
 }
 
 def get_country_and_flag(config):
-    # Упрощенная логика: ищем упоминание страны в самом конфиге (обычно они там есть)
+    config_upper = config.upper()
     for code, flag in FLAGS.items():
-        if code in config.upper():
+        if code in config_upper:
             return f"{flag} {code}"
     return "🌐 UNK"
 
 def rename_config(config, index):
     try:
-        # Ищем часть после символа # (это название в V2Ray/VLESS)
-        if "#" in config:
-            base_url = config.split("#")[0]
-            country_info = get_country_and_flag(config)
-            # Формируем новое название: Флаг + Страна + Freedom + Номер
-            new_name = f"{country_info} | Freedom-{index}"
-            return f"{base_url}#{new_name}"
-        return config
+        # VMess обрабатывается отдельно, так как это Base64 JSON
+        if config.startswith("vmess://"):
+            try:
+                v2_bin = base64.b64decode(config[8:]).decode('utf-8')
+                v2_json = json.loads(v2_bin)
+                country_info = get_country_and_flag(v2_json.get('ps', ''))
+                v2_json['ps'] = f"{country_info} | Freedom-{index}"
+                new_v2 = base64.b64encode(json.dumps(v2_json).encode('utf-8')).decode('utf-8')
+                return f"vmess://{new_v2}"
+            except:
+                return config
+
+        # Остальные (VLESS, SS, Trojan) переименовываются через #
+        base_part = config.split('#')[0]
+        country_info = get_country_and_flag(config)
+        return f"{base_part}#{country_info} | Freedom-{index}"
     except:
         return config
 
@@ -49,33 +58,33 @@ def collect():
         try:
             res = requests.get(url, timeout=15)
             if res.status_code == 200:
-                # Если данные в Base64 (часто бывает в подписках), декодируем
                 content = res.text
-                if not content.startswith(('vless', 'vmess', 'ss')):
+                # Если это зашифрованная подписка (Base64)
+                if not any(proto in content for proto in ['vless://', 'vmess://', 'ss://']):
                     try:
                         content = base64.b64decode(content).decode('utf-8')
                     except:
                         pass
                 
-                # Ищем все протоколы через регулярные выражения
                 found = re.findall(r'(vless|vmess|ss|trojan)://[^\s|]+', content)
                 all_configs.extend(found)
-        except:
+                print(f"Из {url} получено {len(found)} шт.")
+        except Exception as e:
+            print(f"Ошибка при чтении {url}: {e}")
             continue
 
-    # Убираем дубликаты
-    unique_configs = list(set(all_configs))
+    # Чистка дубликатов
+    unique_configs = list(dict.fromkeys(all_configs))
     
-    # Переименовываем и оставляем только рабочие на вид (длинные строки)
     final_configs = []
-    for i, cfg in enumerate(unique_configs[:100]): # Ограничим до 100 лучших
-        new_cfg = rename_config(cfg, i+1)
-        final_configs.append(new_cfg)
+    # Берем первые 200 конфигов для стабильности
+    for i, cfg in enumerate(unique_configs[:200]):
+        final_configs.append(rename_config(cfg, i+1))
 
-    with open("sub_auto.txt", "w") as f:
+    with open("sub_auto.txt", "w", encoding="utf-8") as f:
         f.write("\n".join(final_configs))
     
-    print(f"Готово! Сохранено {len(final_configs)} конфигов с новыми именами.")
+    print(f"Успех! Сохранено {len(final_configs)} конфигов.")
 
 if __name__ == "__main__":
     collect()
